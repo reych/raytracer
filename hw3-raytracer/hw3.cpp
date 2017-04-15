@@ -27,7 +27,8 @@
 #include <imageIO.h>
 #include "glm/glm.hpp"
 #include <iostream>
-#include "raycaster.h"
+#include "raytracer.h"
+#include "math_functions.h"
 using namespace std;
 
 #define MAX_TRIANGLES 20000
@@ -80,111 +81,25 @@ void draw_scene()
         for(unsigned int y=0; y<HEIGHT; y++) {
             glm::vec3 ray0 = glm::vec3(0,0,0);
             glm::vec3 rayD = glm::normalize(glm::vec3(pointX, pointY, -1));
-            int s_i = -1; // Sphere index.
-            int t_i = -1; // Triangle index.
-            float t_s = -1; // Sphere t parameter.
-            float t_tr = -1; // Triangle t parameter.
-
-            //Find intersections with spheres.
-            for(int s=0; s<num_spheres; s++) {
-                glm::vec3 pos = glm::vec3(spheres[s].position[0], spheres[s].position[1], spheres[s].position[2]);
-                float radius = spheres[s].radius;
-                float t_temp = calculateSphereIntersection(ray0, rayD, pos, radius);
-
-                // Found intersection.
-                if(t_temp > -1) {
-                    // Get the closest point.
-                    if(t_s > t_temp || t_s == -1) {
-                        t_s = t_temp;
-                        s_i = s;
-                    }
-                }
-            }
-
-            //Find intersections with triangles.
-            for(int t=0; t<num_triangles; t++) {
-                glm::vec3 posA = glm::vec3((float)triangles[t].v[0].position[0], (float)triangles[t].v[0].position[1], (float)triangles[t].v[0].position[2]);
-                glm::vec3 posB = glm::vec3((float)triangles[t].v[1].position[0], (float)triangles[t].v[1].position[1], (float)triangles[t].v[1].position[2]);
-                glm::vec3 posC = glm::vec3((float)triangles[t].v[2].position[0], (float)triangles[t].v[2].position[1], (float)triangles[t].v[2].position[2]);
-                float t_temp = calculateTriangleIntersection(ray0, rayD, posA, posB, posC);
-
-                // Found intersection.
-                if(t_temp > -1) {
-                    // Get the closest point.
-                    if(t_tr > t_temp || t_tr == -1) {
-                        t_tr = t_temp;
-                        t_i = t;
-                    }
-
-                }
-            }
-
-            // Determine the closest intersection.
-            bool doSphere = ((t_s != -1 && t_tr != -1) && (t_s < t_tr)) || (t_tr == -1 && t_s != -1);
-            bool doTriangle = ((t_s != -1 && t_tr != -1) && (t_tr < t_s)) || (t_s == -1 && t_tr != -1);
+            int type = NOTHING;
+            int index = -1;
+            glm::vec3 barycentricCoord;
+            glm::vec3 intersection = closestIntersection(ray0, rayD, spheres, num_spheres, triangles, num_triangles, type, index, barycentricCoord);
             glm::vec3 color = glm::vec3(0, 0, 0); // Adjust ambient color here.
-            if(doSphere) {
-                // Get sphere color.
-                glm::vec3 intersection = glm::vec3(ray0.x + rayD.x*t_s, ray0.y + rayD.y*t_s, ray0.z + rayD.z*t_s);
-                glm::vec3 normal = (float)(1/spheres[s_i].radius) * glm::vec3(intersection.x-(float)spheres[s_i].position[0], intersection.y-(float)spheres[s_i].position[1], intersection.z-(float)spheres[s_i].position[2]);
-                float ks[3] = {spheres[s_i].color_specular[0], spheres[s_i].color_specular[1], spheres[s_i].color_specular[2]};
-                float kd[3] = {spheres[s_i].color_diffuse[0], spheres[s_i].color_diffuse[1], spheres[s_i].color_diffuse[2]};
-                // TODO: negate if inside of sphere.
+            glm::vec3 color_addition = glm::vec3(0, 0, 0);
 
-                glm::vec3 color_s = fireShadowRay(intersection, -rayD, normal, kd, ks,
-                                                (float)spheres[s_i].shininess, lights, num_lights, spheres, num_spheres, triangles, num_triangles);
-                color = glm::vec3(color.x+color_s.x, color.y+color_s.y, color.z+color_s.z);
-
-            } else if(doTriangle){
-                // Get triangle color.
-                glm::vec3 intersection = glm::vec3(ray0.x + rayD.x*t_tr, ray0.y + rayD.y*t_tr, ray0.z + rayD.z*t_tr);
-                // Interpolate normals, diffuse, normal, shininess.
-                glm::vec3 projectedA = glm::vec3(triangles[t_i].v[0].position[0], triangles[t_i].v[0].position[1], triangles[t_i].v[0].position[2]);
-                glm::vec3 projectedB = glm::vec3(triangles[t_i].v[1].position[0], triangles[t_i].v[1].position[1], triangles[t_i].v[1].position[2]);
-                glm::vec3 projectedC = glm::vec3(triangles[t_i].v[2].position[0], triangles[t_i].v[2].position[1], triangles[t_i].v[2].position[2]);
-                glm::vec3 bCoord = calculate2DBarycentricCoord(intersection, projectedA, projectedB, projectedC);
-                float alpha = bCoord.x;
-                float beta = bCoord.y;
-                float gamma = bCoord.z;
-
-                // triangle ABC,
-                // normals nA, nB, nC,
-                // alpha*nA, beta*nB, gamma*nC,
-                // = alpha(nA.x, nA.y, nA.z), beta(nB.x, nB.y, nB.z), gamma*(nC.x, nC.y, nC.z);
-                // normal = (alpha*nA.x + beta*nB.x + gamma*nC.x, alpha*nA.y + beta*nB.y + gamma*nC.y, alpha*nA.z + beta*nB.z + gamma*nC.z);
-                double* nA = triangles[t_i].v[0].normal;
-                double* nB = triangles[t_i].v[1].normal;
-                double* nC = triangles[t_i].v[2].normal;
-                glm::vec3 normal = glm::vec3((float)(alpha*nA[0] + beta*nB[0] + gamma*nC[0]),
-                                                (float)(alpha*nA[1] + beta*nB[1] + gamma*nC[1]),
-                                                (float)(alpha*nA[2] + beta*nB[2] + gamma*nC[2]));
-                // diffuse = (alpha*dA.R + beta*dB.R + gamma*dC.R, alpha*dA.G + beta*dB.G + gamma*dC.G, alpha*dA.B + beta*dB.B + gamma*dC.B)
-                double* dA = triangles[t_i].v[0].color_diffuse;
-                double* dB = triangles[t_i].v[1].color_diffuse;
-                double* dC = triangles[t_i].v[2].color_diffuse;
-                float diffuse[3] = {(float)(alpha*dA[0] + beta*dB[0] + gamma*dC[0]),
-                                        (float)(alpha*dA[1] + beta*dB[1] + gamma*dC[1]),
-                                        (float)(alpha*dA[2] + beta*dB[2] + gamma*dC[2])};
-                double* spA = triangles[t_i].v[0].color_specular;
-                double* spB = triangles[t_i].v[1].color_specular;
-                double* spC = triangles[t_i].v[2].color_specular;
-                float specular[3] = {(float)(alpha*spA[0] + beta*spB[0] + gamma*spC[0]),
-                                        (float)(alpha*spA[1] + beta*spB[1] + gamma*spC[1]),
-                                        (float)(alpha*spA[2] + beta*spB[2] + gamma*spC[2])};
-                double shA = triangles[t_i].v[0].shininess;
-                double shB = triangles[t_i].v[1].shininess;
-                double shC = triangles[t_i].v[2].shininess;
-                float shininess = (float)(alpha*shA + beta*shB + gamma*shC);
-
-                glm::vec3 color_tr = fireShadowRay(intersection, -rayD, normal, diffuse, specular, shininess,
-                                                lights, num_lights, spheres, num_spheres, triangles, num_triangles);
-                color = glm::vec3(color.x+color_tr.x, color.y+color_tr.y, color.z+color_tr.z);
-
+            if(type == SPHERE || type == TRIANGLE) {
+                color = localColor(intersection, -rayD, type, index, lights, num_lights, spheres, num_spheres, triangles, num_triangles, barycentricCoord);
+                color_addition = trace(ray0, intersection, -rayD, type, index,
+                    lights, num_lights, spheres, num_spheres, triangles, num_triangles, 5);
+                color = glm::vec3(0.5*color.x + 0.5*color_addition.x, 0.5*color.y+0.5*color_addition.y, 0.5*color.z + 0.5*color_addition.z);
             } else {
                 color = glm::vec3(255, 255, 255);
             }
 
             plot_pixel(x, y, clamp(color.x,0,255), clamp(color.y,0,255), clamp(color.z,0,255));
+            //plot_pixel(x, y, color_addition.x, color_addition.y, color_addition.z);
+            //plot_pixel(x, y, clamp(color_addition.x,0,255), clamp(color_addition.y,0,255), clamp(color_addition.z,0,255));
             pointY += (2.0*tan((fov*3.14159/180.0)/2.0)) /  HEIGHT;
         }
         glEnd();

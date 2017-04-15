@@ -1,15 +1,11 @@
-#include "raycaster.h"
+#include "math_functions.h"
 #include <stdlib.h>
 #include <iostream>
 using namespace std;
 
-const int XY_PLANE = 0;
-const int XZ_PLANE = 1;
-const int YZ_PLANE = 2;
-
 // Given ray origin 'ray0', normalized ray direction 'rayD', sphere center position 'spherePos', and sphere radius 'radius'.
 // Return the minimum t value of the intersection.
-float calculateSphereIntersection(const glm::vec3 & ray0, const glm::vec3 & rayD, const glm::vec3 & spherePos, float radius) {
+float sphereIntersection(const glm::vec3 & ray0, const glm::vec3 & rayD, const glm::vec3 & spherePos, float radius) {
     //rayD = glm::normalize(rayD);
     float b = 2*( rayD.x*(ray0.x-spherePos.x) + rayD.y*(ray0.y-spherePos.y) + rayD.z*(ray0.z-spherePos.z) );
     float c = (ray0.x-spherePos.x)*(ray0.x-spherePos.x) + (ray0.y-spherePos.y)*(ray0.y-spherePos.y) + (ray0.z-spherePos.z)*(ray0.z-spherePos.z) - radius*radius;
@@ -23,7 +19,7 @@ float calculateSphereIntersection(const glm::vec3 & ray0, const glm::vec3 & rayD
         float t1 = (-b - sqrt(discriminant))/2.0;
 
         // If neither are negative, return minimum of values.
-        if(t0>0 && t1>0) {
+        if(abs(t0)>1e-4 && abs(t1)>1e-4) {
             return fmin(t0, t1);
         }
 
@@ -33,7 +29,7 @@ float calculateSphereIntersection(const glm::vec3 & ray0, const glm::vec3 & rayD
         }
 
         // One value is positive
-        if(t0 < 0) {
+        if(t0 < 0.00001) {
             return t1;
         } else {
             return t0;
@@ -42,8 +38,8 @@ float calculateSphereIntersection(const glm::vec3 & ray0, const glm::vec3 & rayD
 }
 
 // Given ray origin 'ray0', ray direction 'rayD', triangle position 'posA, posB, posC', triangle normal 'normal'.
-// Return the t parameter of the intersection point or -1 if it's not valid.
-float calculateTriangleIntersection(const glm::vec3 & ray0, const glm::vec3 & rayD, const glm::vec3 & posA, const glm::vec3 & posB, const glm::vec3 & posC) {
+// Return the t parameter of the intersection point or -1 if it's not valid. Output parameter barycentricCoord:
+float triangleIntersection(const glm::vec3 & ray0, const glm::vec3 & rayD, const glm::vec3 & posA, const glm::vec3 & posB, const glm::vec3 & posC, glm::vec3 & barycentricCoord) {
     // Calculate normal.
     glm::vec3 BA = glm::vec3(posB.x-posA.x, posB.y-posA.y, posB.z-posA.z);
     glm::vec3 CA = glm::vec3(posC.x-posA.x, posC.y-posA.y, posC.z-posA.z);
@@ -61,7 +57,7 @@ float calculateTriangleIntersection(const glm::vec3 & ray0, const glm::vec3 & ra
     float t = -(glm::dot(normal, ray0) + d) / normalDotRayD;
 
     // Intersection behind ray origin, exit.
-    if(t <= 0.00015) {
+    if(t <= 0.0001) {
         return -1;
     }
 
@@ -116,6 +112,8 @@ float calculateTriangleIntersection(const glm::vec3 & ray0, const glm::vec3 & ra
     float gamma = areaABp/areaABC;
     float alpha = areapBC/areaABC;
 
+    barycentricCoord = glm::vec3(alpha, beta, gamma);
+
     // Test alpha, beta, gamma values, return t if point within triangle.
     if((alpha >= 0 && alpha <= 1) && (beta >=0 && beta <=1) && (gamma >=0 && gamma <= 1)
         && alpha+beta+gamma > 0.999 && alpha+beta+gamma < 1.00001) {
@@ -127,64 +125,12 @@ float calculateTriangleIntersection(const glm::vec3 & ray0, const glm::vec3 & ra
 
 }
 
-// Fire shadow ray from point to light source.
-// Return the color of the object RGB.
-glm::vec3 fireShadowRay(glm::vec3 pos, glm::vec3 viewer, glm::vec3 normal, float kd[],float ks[], float shininess,
-    Light lights[], int numLights, Sphere spheres[], int numSpheres, Triangle triangles[], int numTriangles) {
-    glm::vec3 color = glm::vec3(0,0,0);
-    // Calculate shadow ray for all lights.
-    for(int i=0; i<numLights; i++) {
-        bool blocked = false;
-        // Create a ray.
-        glm::vec3 ray0 = glm::vec3(pos.x, pos.y, pos.z);
-        glm::vec3 l = glm::vec3(lights[i].position[0]-pos.x, lights[i].position[1]-pos.y, lights[i].position[2]-pos.z);
-        l = glm::normalize(l); // Vector to light.
-
-        // Check sphere intersections.
-        for(int j=0; j<numSpheres; j++) {
-            glm::vec3 spherePos = glm::vec3(spheres[j].position[0], spheres[j].position[1], spheres[j].position[2]);
-            float radius = spheres[j].radius;
-            float t = calculateSphereIntersection(ray0, l, spherePos, radius);
-            if(t > 0.00015) {
-                blocked = true;
-            }
-        }
-
-        // Check triangle intersections.
-        if(!blocked) {
-            for(int j=0; j<numTriangles; j++) {
-                glm::vec3 posA = glm::vec3(triangles[j].v[0].position[0], triangles[j].v[0].position[1], triangles[j].v[0].position[2]);
-                glm::vec3 posB = glm::vec3(triangles[j].v[1].position[0], triangles[j].v[1].position[1], triangles[j].v[1].position[2]);
-                glm::vec3 posC = glm::vec3(triangles[j].v[2].position[0], triangles[j].v[2].position[1], triangles[j].v[2].position[2]);
-                float t = calculateTriangleIntersection(ray0, l, posA, posB, posC);
-                if(t > 0.00015) {
-                    blocked = true;
-                }
-            }
-        }
-
-        // If not blocked, calculate the Phong lighting.
-        if(!blocked) {
-            normal = glm::normalize(normal);
-            viewer = glm::normalize(viewer); // Vector to viewer.
-            float lDotN = glm::dot(l, normal);
-            glm::vec3 r = glm::vec3(-l.x + 2*lDotN*normal.x, -l.y + 2*lDotN*normal.y, -l.z + 2*lDotN*normal.z); // Reflection vector.
-            r = glm::normalize(r);
-
-            float specularComp = clamp(glm::dot(r,viewer), 0, 1);
-            float diffuseComp = clamp(glm::dot(l, normal), 0, 1);
-            float red = lights[i].color[0] * ( kd[0]*(diffuseComp) + ks[0]*(pow(specularComp, shininess)) );
-            float green = lights[i].color[1] * ( kd[1]*(diffuseComp) + ks[1]*(pow(specularComp, shininess)) );
-            float blue = lights[i].color[2] * ( kd[2]*(diffuseComp) + ks[2]*(pow(specularComp, shininess)) );
-            color = glm::vec3(color.x+red*255, color.y+green*255, color.z+blue*255);
-        }
-
-    }
-
-    color = glm::vec3(clamp(color.x, 0, 255), clamp(color.y, 0, 255), clamp(color.z, 0, 255));
-    return color;
-
-
+glm::vec3 reflectionVector(const glm::vec3 & ray0, const glm::vec3 & rayD, const glm::vec3 & normal) {
+    glm::vec3 l = glm::vec3(rayD.x-ray0.x, rayD.y-ray0.y, rayD.z-ray0.z); // Incoming ray to intersection.
+    float lDotN = glm::dot(l, normal);
+    glm::vec3 r = glm::vec3(-l.x + 2*lDotN*normal.x, -l.y + 2*lDotN*normal.y, -l.z + 2*lDotN*normal.z); // Reflection vector.
+    r = glm::normalize(r);
+    return r;
 }
 
 // Given point and triangle vertices posA, posB, posC.

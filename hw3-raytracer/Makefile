@@ -1,5 +1,5 @@
-HW3_CXX_SRC=hw3.cpp raycaster.cpp
-HW3_HEADER=raycaster.h
+HW3_CXX_SRC=hw3.cpp raytracer.cpp math_functions.cpp
+HW3_HEADER=raytracer.h math_functions.h
 HW3_OBJ=$(notdir $(patsubst %.cpp,%.o,$(HW3_CXX_SRC)))
 
 IMAGE_LIB_SRC=$(wildcard ../external/imageIO/*.cpp)
