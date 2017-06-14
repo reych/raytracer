@@ -52,9 +52,9 @@ glm::vec3 fireShadowRay(glm::vec3 pos, glm::vec3 viewer, glm::vec3 normal, float
             normal = glm::normalize(normal);
             viewer = -pos;
             viewer = glm::normalize(viewer); // Vector to viewer.
-            //float lDotN = glm::dot(l, normal);
-            //glm::vec3 r = glm::vec3(-l.x + 2*lDotN*normal.x, -l.y + 2*lDotN*normal.y, -l.z + 2*lDotN*normal.z); // Reflection vector.
-            glm::vec3 r = glm::reflect(l, normal);
+            float lDotN = glm::dot(l, normal);
+            glm::vec3 r = glm::vec3(-l.x + 2*lDotN*normal.x, -l.y + 2*lDotN*normal.y, -l.z + 2*lDotN*normal.z); // Reflection vector.
+            //glm::vec3 r = -glm::reflect(l, normal);
             r = glm::normalize(r);
 
             float specularComp = clamp(glm::dot(r,viewer), 0, 1);
@@ -74,11 +74,10 @@ glm::vec3 fireShadowRay(glm::vec3 pos, glm::vec3 viewer, glm::vec3 normal, float
 }
 
 // Return color from reflection and transmission rays.
-glm::vec3 trace(const glm::vec3 & ray0, const glm::vec3 & pos, glm::vec3 viewer, int type, int index,
+glm::vec3 trace(const glm::vec3 & ray0, const glm::vec3 & rayD, glm::vec3 camera, int type, int index,
     Light lights[], int numLights, Sphere spheres[], int numSpheres, Triangle triangles[], int numTriangles, int recurseDepth) {
 
     glm::vec3 local, reflected, transmitted;
-    glm::vec3 intersect;
 
     // If reached end of recursion.
     if (recurseDepth == 0)
@@ -87,39 +86,44 @@ glm::vec3 trace(const glm::vec3 & ray0, const glm::vec3 & pos, glm::vec3 viewer,
     // Find intersection.
     int type_intersect = -1;
     int index_intersect = -1;
-    glm::vec3 barycentricCoord; // output parameter for triangle interpolation functions.
-    glm::vec3 intersection = closestIntersection(ray0, pos, spheres, numSpheres, triangles, numTriangles, type_intersect, index_intersect, barycentricCoord);
+    glm::vec3 barycentricCoord; // Output parameter for triangle interpolation functions.
+    glm::vec3 intersection = closestIntersection(ray0, rayD, spheres, numSpheres, triangles, numTriangles, type_intersect, index_intersect, barycentricCoord);
 
     // If hit light, return light color.
     if(type_intersect == LIGHT)
-        return (arrayToVec3(lights[index].color));
+        return (arrayToVec3(lights[index_intersect].color));
     // If no intersection, return black.
     if(type_intersect == NOTHING)
         return glm::vec3(0,0,0);
 
     glm::vec3 normal;
     if(type_intersect == SPHERE)
-        normal = sphereNormal(intersection, spheres[index]);
-    else
-        normal = interpolateNormal(barycentricCoord, triangles[index]);
-        //normal = arrayToVec3(triangles[index].v[0].normal);
-
-    //glm::vec3 l = glm::vec3(pos.x-ray0.x, pos.y-ray0.y, pos.z-ray0.z); // Incoming ray to intersection.
-    //l = glm::normalize(l);
-    glm::vec3 l = glm::normalize(pos);
-    //float lDotN = glm::dot(l, normal);
+        normal = sphereNormal(rayD, spheres[index_intersect]);
+    else if(type_intersect ==TRIANGLE)
+        normal = interpolateNormal(barycentricCoord, triangles[index_intersect]);
+    //glm::vec3 l = glm::normalize(glm::vec3(rayD.x-ray0.x, rayD.y-ray0.y, rayD.z-ray0.z)); // Incoming ray to intersection.
+    glm::vec3 l = glm::normalize(glm::vec3(ray0.x-rayD.x, ray0.y-rayD.y, ray0.z-rayD.z));
+    //glm::vec3 l = glm::normalize(rayD);
+    //glm::vec3 l = glm::normalize(glm::vec3(ray0.x-pos.x, ray0.y-pos.y, ray0.z-pos.z));
+    normal = glm::normalize(normal); //Should i do this?
+    float lDotN = glm::dot(l, normal);
     //glm::vec3 r = glm::vec3(-l.x + 2*lDotN*normal.x, -l.y + 2*lDotN*normal.y, -l.z + 2*lDotN*normal.z); // Reflection vector.
-    glm::vec3 r = glm::reflect(l, normal);
+    glm::vec3 r = glm::vec3(-l.x + 2*lDotN*normal.x, -l.y + 2*lDotN*normal.y, -l.z + 2*lDotN*normal.z); // Reflection vector.
+    //glm::vec3 r = glm::reflect(l, normal); // Reflected ray.
     r = glm::normalize(r);
+    glm::vec3 viewer = glm::vec3(camera.x-intersection.x, camera.y-intersection.y, camera.z-intersection.z);
 
-    local = localColor(intersection, viewer, type, index, lights, numLights, spheres, numSpheres, triangles, numTriangles, barycentricCoord);
-    reflected = trace(intersection, r, viewer, type_intersect, index_intersect, lights, numLights, spheres, numSpheres, triangles, numTriangles, recurseDepth - 1);
+    local = localColor(intersection, viewer, type_intersect, index_intersect, lights, numLights, spheres, numSpheres, triangles, numTriangles, barycentricCoord);
+    reflected = trace(intersection, r, camera, type_intersect, index_intersect, lights, numLights, spheres, numSpheres, triangles, numTriangles, recurseDepth - 1);
 
-    float discount = 1;
-    return glm::vec3(discount*local.x + discount*reflected.x, discount*local.y + discount*reflected.y, discount*local.z + discount*reflected.z);
-    //cout<<normal.x<<" "<<normal.y<<" "<<normal.z<<endl;
+    float discount = 0.3;
+    return glm::vec3(local.x + discount*reflected.x, local.y + discount*reflected.y, local.z + discount*reflected.z);
+    cout<<normal.x<<" "<<normal.y<<" "<<normal.z<<endl;
     //normal = glm::normalize(normal);
     //return glm::vec3(abs(index/2.0)*255, abs(index/2.0)*255, abs(index/2.0)*255);
+    //normal = glm::normalize(normal);
+    //normal = glm::normalize(normal);
+    //return glm::vec3(normal.x*255, normal.y*255, normal.z*255);
 
 
 }
@@ -187,7 +191,7 @@ glm::vec3 localColor(const glm::vec3 & intersection, const glm::vec3 & viewer, i
 }
 
 glm::vec3 sphereNormal(const glm::vec3 & intersection, Sphere sphere) {
-    glm::vec3 normal = (float)(1/sphere.radius) * glm::vec3(intersection.x-(float)sphere.position[0], intersection.y-(float)sphere.position[1], intersection.z-(float)sphere.position[2]);
+    glm::vec3 normal = (float)(1.0/sphere.radius) * glm::vec3(intersection.x-(float)sphere.position[0], intersection.y-(float)sphere.position[1], intersection.z-(float)sphere.position[2]);
     return normal;
 }
 glm::vec3 interpolateNormal(const glm::vec3 & barycentricCoord, Triangle triangle) {

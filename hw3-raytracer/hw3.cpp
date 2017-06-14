@@ -84,18 +84,19 @@ void draw_scene()
             int type = NOTHING;
             int index = -1;
             glm::vec3 barycentricCoord;
-            glm::vec3 intersection = closestIntersection(ray0, rayD, spheres, num_spheres, triangles, num_triangles, type, index, barycentricCoord);
+            glm::vec3 camera = glm::vec3(0,0,0); // camera position
+            //glm::vec3 intersection = closestIntersection(ray0, rayD, spheres, num_spheres, triangles, num_triangles, type, index, barycentricCoord);
             glm::vec3 color = glm::vec3(0, 0, 0); // Adjust ambient color here.
-            glm::vec3 color_addition = glm::vec3(0, 0, 0);
+            //glm::vec3 color_addition = glm::vec3(0, 0, 0);
 
-            if(type == SPHERE || type == TRIANGLE) {
-                color = localColor(intersection, -rayD, type, index, lights, num_lights, spheres, num_spheres, triangles, num_triangles, barycentricCoord);
-                color_addition = trace(ray0, intersection, -rayD, type, index,
-                    lights, num_lights, spheres, num_spheres, triangles, num_triangles, 5);
-                color = glm::vec3(0.5*color.x + 0.5*color_addition.x, 0.5*color.y+0.5*color_addition.y, 0.5*color.z + 0.5*color_addition.z);
-            } else {
-                color = glm::vec3(255, 255, 255);
-            }
+            //if(type == SPHERE || type == TRIANGLE) {
+                //color = localColor(intersection, -rayD, type, index, lights, num_lights, spheres, num_spheres, triangles, num_triangles, barycentricCoord);
+                color = trace(ray0, rayD, camera, type, index,
+                    lights, num_lights, spheres, num_spheres, triangles, num_triangles, 10);
+                //color = glm::vec3(0.5*color.x + 0.5*color_addition.x, 0.5*color.y+0.5*color_addition.y, 0.5*color.z + 0.5*color_addition.z);
+            //} else {
+                //color = glm::vec3(255, 255, 255);
+            //}
 
             plot_pixel(x, y, clamp(color.x,0,255), clamp(color.y,0,255), clamp(color.z,0,255));
             //plot_pixel(x, y, color_addition.x, color_addition.y, color_addition.z);
