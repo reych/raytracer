@@ -4,8 +4,9 @@
 using namespace std;
 
 // Given ray origin 'ray0', normalized ray direction 'rayD', sphere center position 'spherePos', and sphere radius 'radius'.
+// Output parameter sphereRootFlag gives type of root.
 // Return the minimum t value of the intersection.
-float sphereIntersection(const glm::vec3 & ray0, const glm::vec3 & rayD, const glm::vec3 & spherePos, float radius) {
+float sphereIntersection(const glm::vec3 & ray0, const glm::vec3 & rayD, const glm::vec3 & spherePos, float radius, sf_int & sphereRootFlag) {
     //rayD = glm::normalize(rayD);
     float b = 2*( rayD.x*(ray0.x-spherePos.x) + rayD.y*(ray0.y-spherePos.y) + rayD.z*(ray0.z-spherePos.z) );
     float c = (ray0.x-spherePos.x)*(ray0.x-spherePos.x) + (ray0.y-spherePos.y)*(ray0.y-spherePos.y) + (ray0.z-spherePos.z)*(ray0.z-spherePos.z) - radius*radius;
@@ -13,13 +14,22 @@ float sphereIntersection(const glm::vec3 & ray0, const glm::vec3 & rayD, const g
     float discriminant = b*b - 4*c;
 
     if(discriminant < 0.00001) {
+        sphereRootFlag = SPHERE_NO_ROOT;
         return -1;
     } else {
         float t0 = (-b + sqrt(discriminant))/2.0;
         float t1 = (-b - sqrt(discriminant))/2.0;
 
+        // Check if same root.
+        if(abs(t0-t1) < .00001) {
+            sphereRootFlag = SPHERE_DOUBLE_ROOT;
+        } else {
+            sphereRootFlag = SPHERE_UNEQUAL_ROOT;
+        }
+
         // If neither are negative, return minimum of values.
-        if(abs(t0)>1e-4 && abs(t1)>1e-4) {
+        if(t0>1e-4 && t1>1e-4) {
+            //cout<<t0<<", "<<t1<<endl;
             return fmin(t0, t1);
         }
 

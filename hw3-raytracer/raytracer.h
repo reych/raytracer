@@ -38,10 +38,12 @@ struct Light
 
 glm::vec3 localColor(const glm::vec3 & intersection, const glm::vec3 & viewer, int type, int index,
     Light lights[], int numLights, Sphere spheres[], int numSpheres, Triangle triangles[], int numTriangles, const glm::vec3 & barycentricCoord);
-glm::vec3 fireShadowRay(glm::vec3 pos, glm::vec3 viewer, glm::vec3 normal, float kd[], float ks[], float shininess,
+glm::vec3 fireShadowRay(glm::vec3 pos, glm::vec3 viewer, glm::vec3 normal, float kd[],float ks[], float shininess,
     Light lights[], int numLights, Sphere spheres[], int numSpheres, Triangle triangles[], int numTriangles);
 glm::vec3 trace(const glm::vec3 & ray0, const glm::vec3 & pos, glm::vec3 viewer, int type, int index,
     Light lights[], int numLights, Sphere spheres[], int numSpheres, Triangle triangles[], int numTriangles, int recurseDepth);
+
+glm::vec3 transmit(const glm::vec3 & normal, const glm::vec3 & l, int upperType, int lowerType);
 
 glm::vec3 sphereNormal(const glm::vec3 & intersection, Sphere sphere);
 glm::vec3 interpolateNormal(const glm::vec3 & barycentricCoord, Triangle triangle);

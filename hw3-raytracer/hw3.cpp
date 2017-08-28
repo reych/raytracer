@@ -50,6 +50,8 @@ int mode = MODE_DISPLAY;
 //the field of view of the camera
 #define fov 60.0
 
+#define ssFactor 1.0
+
 unsigned char buffer[HEIGHT][WIDTH][3];
 
 Triangle triangles[MAX_TRIANGLES];
@@ -71,7 +73,13 @@ void draw_scene()
     // For every pixel, fire a ray to find first intersection (These are the visible vertices).
     // -->fire shadow ray to determine color.
     // Then put the color in the buffer.
+    float pixelWidth = (2.0*WIDTH/HEIGHT*tan((fov*3.14159/180.0)/2.0)) / WIDTH;
+    float pixelHeight = (2.0*tan((fov*3.14159/180.0)/2.0)) /  HEIGHT;
+
+    glm::vec3 ray0 = glm::vec3(0,0,0);
+
     float pointX = -1.0*(1.0*WIDTH/HEIGHT*tan((fov*3.14159/180.0)/2.0));
+
     for(unsigned int x=0; x<WIDTH; x++) {
         glPointSize(2.0);
         glBegin(GL_POINTS);
@@ -79,33 +87,72 @@ void draw_scene()
         float pointY = -1.0* (tan((fov*3.14159/180.0)/2.0) );
 
         for(unsigned int y=0; y<HEIGHT; y++) {
-            glm::vec3 ray0 = glm::vec3(0,0,0);
-            glm::vec3 rayD = glm::normalize(glm::vec3(pointX, pointY, -1));
-            int type = NOTHING;
-            int index = -1;
-            glm::vec3 barycentricCoord;
-            glm::vec3 camera = glm::vec3(0,0,0); // camera position
-            //glm::vec3 intersection = closestIntersection(ray0, rayD, spheres, num_spheres, triangles, num_triangles, type, index, barycentricCoord);
-            glm::vec3 color = glm::vec3(0, 0, 0); // Adjust ambient color here.
-            //glm::vec3 color_addition = glm::vec3(0, 0, 0);
+            // Super sample
+            glm::vec3 pixelColor = glm::vec3(0, 0, 0); // Adjust ambient color here.
 
-            //if(type == SPHERE || type == TRIANGLE) {
-                //color = localColor(intersection, -rayD, type, index, lights, num_lights, spheres, num_spheres, triangles, num_triangles, barycentricCoord);
-                color = trace(ray0, rayD, camera, type, index,
-                    lights, num_lights, spheres, num_spheres, triangles, num_triangles, 10);
-                //color = glm::vec3(0.5*color.x + 0.5*color_addition.x, 0.5*color.y+0.5*color_addition.y, 0.5*color.z + 0.5*color_addition.z);
-            //} else {
-                //color = glm::vec3(255, 255, 255);
-            //}
+            float subPointX = pointX + pixelWidth/(2 * ssFactor);
+            float subPointY = pointY + pixelHeight/(2 * ssFactor);
 
-            plot_pixel(x, y, clamp(color.x,0,255), clamp(color.y,0,255), clamp(color.z,0,255));
-            //plot_pixel(x, y, color_addition.x, color_addition.y, color_addition.z);
-            //plot_pixel(x, y, clamp(color_addition.x,0,255), clamp(color_addition.y,0,255), clamp(color_addition.z,0,255));
-            pointY += (2.0*tan((fov*3.14159/180.0)/2.0)) /  HEIGHT;
+            while(subPointX < pointX + pixelWidth) {
+                while(subPointY < pointY + pixelHeight) {
+
+                    glm::vec3 rayD = glm::normalize(glm::vec3(subPointX, subPointY, -1));
+                    int type = NOTHING;
+                    int index = -1;
+                    glm::vec3 barycentricCoord;
+                    glm::vec3 camera = glm::vec3(0,0,0); // camera position
+
+                    glm::vec3 color = trace(ray0, rayD, camera, type, index,
+                        lights, num_lights, spheres, num_spheres, triangles, num_triangles, 5);
+
+                    pixelColor.x += color.x;
+                    pixelColor.y += color.y;
+                    pixelColor.z += color.z;
+
+                    subPointY += pixelHeight/ssFactor;
+                }
+                subPointX += pixelWidth/ssFactor;
+            }
+
+            pixelColor.x /= ssFactor;
+            pixelColor.y /= ssFactor;
+            pixelColor.z /= ssFactor;
+
+            plot_pixel(x, y, clamp(pixelColor.x,10,255), clamp(pixelColor.y,10,255), clamp(pixelColor.z,10,255));
+
+
+            /* ----------- Original non multi sample ray tracing --------------- */
+            // glm::vec3 ray0 = glm::vec3(0,0,0);
+            // glm::vec3 rayD = glm::normalize(glm::vec3(pointX, pointY, -1));
+            // int type = NOTHING;
+            // int index = -1;
+            // glm::vec3 barycentricCoord;
+            // glm::vec3 camera = glm::vec3(0,0,0); // camera position
+            // //glm::vec3 intersection = closestIntersection(ray0, rayD, spheres, num_spheres, triangles, num_triangles, type, index, barycentricCoord);
+            // glm::vec3 color = glm::vec3(0, 0, 0); // Adjust ambient color here.
+            // //glm::vec3 color_addition = glm::vec3(0, 0, 0);
+            //
+            // //if(type == SPHERE || type == TRIANGLE) {
+            //     //color = localColor(intersection, -rayD, type, index, lights, num_lights, spheres, num_spheres, triangles, num_triangles, barycentricCoord);
+            //     color = trace(ray0, rayD, camera, type, index,
+            //         lights, num_lights, spheres, num_spheres, triangles, num_triangles, 20);
+            //     //color = glm::vec3(0.5*color.x + 0.5*color_addition.x, 0.5*color.y+0.5*color_addition.y, 0.5*color.z + 0.5*color_addition.z);
+            // //} else {
+            //     //color = glm::vec3(255, 255, 255);
+            // //}
+            //
+            // plot_pixel(x, y, clamp(color.x,10,255), clamp(color.y,10,255), clamp(color.z,10,255));
+            // //plot_pixel(x, y, color_addition.x, color_addition.y, color_addition.z);
+            // //plot_pixel(x, y, clamp(color_addition.x,0,255), clamp(color_addition.y,0,255), clamp(color_addition.z,0,255));
+            // //pointY += (2.0*tan((fov*3.14159/180.0)/2.0)) /  HEIGHT;
+
+            // Increment
+            pointY += pixelHeight;
         }
         glEnd();
         glFlush();
-        pointX += (2.0*WIDTH/HEIGHT*tan((fov*3.14159/180.0)/2.0)) / WIDTH;
+        //pointX += (2.0*WIDTH/HEIGHT*tan((fov*3.14159/180.0)/2.0)) / WIDTH;
+        pointX += pixelWidth;
     }
 
   printf("Done!\n"); fflush(stdout);

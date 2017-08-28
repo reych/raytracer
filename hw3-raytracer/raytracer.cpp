@@ -4,11 +4,6 @@
 #include <iostream>
 using namespace std;
 
-const int XY_PLANE = 0;
-const int XZ_PLANE = 1;
-const int YZ_PLANE = 2;
-
-
 // Fire shadow ray from point to light source.
 // Return the color of the object RGB.
 glm::vec3 fireShadowRay(glm::vec3 pos, glm::vec3 viewer, glm::vec3 normal, float kd[],float ks[], float shininess,
@@ -26,8 +21,9 @@ glm::vec3 fireShadowRay(glm::vec3 pos, glm::vec3 viewer, glm::vec3 normal, float
         for(int j=0; j<numSpheres; j++) {
             glm::vec3 spherePos = glm::vec3(spheres[j].position[0], spheres[j].position[1], spheres[j].position[2]);
             float radius = spheres[j].radius;
-            float t = sphereIntersection(ray0, l, spherePos, radius);
-            if(t > 0.00015) {
+            sf_int sphereRootFlag;
+            float t = sphereIntersection(ray0, l, spherePos, radius, sphereRootFlag);
+            if(t > 0.00015 && sphereRootFlag != SPHERE_DOUBLE_ROOT) {
                 blocked = true;
                 break;
             }
@@ -101,30 +97,70 @@ glm::vec3 trace(const glm::vec3 & ray0, const glm::vec3 & rayD, glm::vec3 camera
         normal = sphereNormal(rayD, spheres[index_intersect]);
     else if(type_intersect ==TRIANGLE)
         normal = interpolateNormal(barycentricCoord, triangles[index_intersect]);
-    //glm::vec3 l = glm::normalize(glm::vec3(rayD.x-ray0.x, rayD.y-ray0.y, rayD.z-ray0.z)); // Incoming ray to intersection.
+
     glm::vec3 l = glm::normalize(glm::vec3(ray0.x-rayD.x, ray0.y-rayD.y, ray0.z-rayD.z));
-    //glm::vec3 l = glm::normalize(rayD);
-    //glm::vec3 l = glm::normalize(glm::vec3(ray0.x-pos.x, ray0.y-pos.y, ray0.z-pos.z));
+
     normal = glm::normalize(normal); //Should i do this?
     float lDotN = glm::dot(l, normal);
-    //glm::vec3 r = glm::vec3(-l.x + 2*lDotN*normal.x, -l.y + 2*lDotN*normal.y, -l.z + 2*lDotN*normal.z); // Reflection vector.
+
     glm::vec3 r = glm::vec3(-l.x + 2*lDotN*normal.x, -l.y + 2*lDotN*normal.y, -l.z + 2*lDotN*normal.z); // Reflection vector.
-    //glm::vec3 r = glm::reflect(l, normal); // Reflected ray.
     r = glm::normalize(r);
     glm::vec3 viewer = glm::vec3(camera.x-intersection.x, camera.y-intersection.y, camera.z-intersection.z);
 
+    int upperType = NOTHING;
+    int lowerType = NOTHING;
+    // If same type, and same index, then same object, no refraction because going through same medium
+    if(type == type_intersect) {
+        if(index == index_intersect) {
+            upperType = type;
+            lowerType = type;
+        } else {
+            upperType = NOTHING;
+            lowerType = type_intersect;
+        }
+
+    }
+    // if not same object, then assume there's air in between, so first material is air.
+    else {
+        upperType = NOTHING;
+        lowerType = type_intersect;
+    }
+    glm::vec3 t = glm::normalize(transmit(normal, l, upperType, lowerType)); // Get transmitted angle.
+
     local = localColor(intersection, viewer, type_intersect, index_intersect, lights, numLights, spheres, numSpheres, triangles, numTriangles, barycentricCoord);
     reflected = trace(intersection, r, camera, type_intersect, index_intersect, lights, numLights, spheres, numSpheres, triangles, numTriangles, recurseDepth - 1);
+    //transmitted = trace(intersection, t, camera, type_intersect, index_intersect, lights, numLights, spheres, numSpheres, triangles, numTriangles, recurseDepth - 1);
 
-    float discount = 0.3;
+    float discount = .3;
+    float t_discount = .3;
+    float alpha = 0.5;
     return glm::vec3(local.x + discount*reflected.x, local.y + discount*reflected.y, local.z + discount*reflected.z);
-    cout<<normal.x<<" "<<normal.y<<" "<<normal.z<<endl;
-    //normal = glm::normalize(normal);
-    //return glm::vec3(abs(index/2.0)*255, abs(index/2.0)*255, abs(index/2.0)*255);
-    //normal = glm::normalize(normal);
-    //normal = glm::normalize(normal);
-    //return glm::vec3(normal.x*255, normal.y*255, normal.z*255);
+    //return glm::vec3(local.x + discount*reflected.x + t_discount*transmitted.x, local.y + discount*reflected.y + t_discount*transmitted.y, local.z + discount*reflected.z + t_discount*transmitted.z);
+    //return glm::vec3(local.x + t_discount*transmitted.x, local.y + t_discount*transmitted.y, local.z + t_discount*transmitted.z);
 
+
+}
+
+// Given normal, incoming angle l, upper material 'upperType', and lower material 'lowerMaterial'.
+// Return vector direction of transmission.
+glm::vec3 transmit(const glm::vec3 & normal, const glm::vec3 & l, int upperType, int lowerType) {
+    // Set some refractive index values.
+    float nl = 1.0;// index of upper material.
+    float nt = 1.0;// index of lower material.
+
+    if (upperType == SPHERE) {
+        nl = 1.33; // Water.
+    } else if (upperType == TRIANGLE) {
+        nl = 1.49;
+    }
+    if (lowerType == SPHERE) {
+        nt = 1.33; // Water.
+    } else if (upperType == TRIANGLE) {
+        nt = 1.49;
+    }
+    float n = nt/nl;
+
+    return refract(normal, l, n);
 
 }
 
@@ -226,10 +262,11 @@ glm::vec3 closestIntersection(const glm::vec3 & ray0, const glm::vec3 & rayD,
         for(int s=0; s<numSpheres; s++) {
             glm::vec3 pos = glm::vec3(spheres[s].position[0], spheres[s].position[1], spheres[s].position[2]);
             float radius = spheres[s].radius;
-            float t_temp = sphereIntersection(ray0, rayD, pos, radius);
+            sf_int sphereRootFlag;
+            float t_temp = sphereIntersection(ray0, rayD, pos, radius, sphereRootFlag); // TODO: May be intersecting with self...need to get closest intersection that is not a doubleroot.
 
             // Found intersection.
-            if(t_temp > -1) {
+            if(t_temp > -1 && sphereRootFlag != SPHERE_DOUBLE_ROOT) {
                 // Get the closest point.
                 if(t_s > t_temp || t_s == -1) {
                     t_s = t_temp;

@@ -2,7 +2,12 @@
 #define MATH_FUNCTIONS_H
 #include "glm/glm.hpp"
 
-float sphereIntersection(const glm::vec3 & ray0, const glm::vec3 & rayD, const glm::vec3 & spherePos, float radius);
+typedef int sf_int;
+const sf_int SPHERE_DOUBLE_ROOT = 2;
+const sf_int SPHERE_UNEQUAL_ROOT = 1;
+const sf_int SPHERE_NO_ROOT = 0;
+
+float sphereIntersection(const glm::vec3 & ray0, const glm::vec3 & rayD, const glm::vec3 & spherePos, float radius, sf_int & sphereRoot);
 float triangleIntersection(const glm::vec3 & ray0, const glm::vec3 & rayD, const glm::vec3 & posA,
     const glm::vec3 & posB, const glm::vec3 & posC, glm::vec3 & barycentricCoord);
 
