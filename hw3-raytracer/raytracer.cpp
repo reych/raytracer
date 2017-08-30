@@ -98,9 +98,10 @@ glm::vec3 trace(const glm::vec3 & ray0, const glm::vec3 & rayD, glm::vec3 camera
     else if(type_intersect ==TRIANGLE)
         normal = interpolateNormal(barycentricCoord, triangles[index_intersect]);
 
-    glm::vec3 l = glm::normalize(glm::vec3(ray0.x-rayD.x, ray0.y-rayD.y, ray0.z-rayD.z));
+    //glm::vec3 l = glm::normalize(glm::vec3(ray0.x-rayD.x, ray0.y-rayD.y, ray0.z-rayD.z));
+    glm::vec3 l = glm::vec3(ray0.x-rayD.x, ray0.y-rayD.y, ray0.z-rayD.z);
 
-    normal = glm::normalize(normal); //Should i do this?
+    //normal = glm::normalize(normal); //Should i do this?
     float lDotN = glm::dot(l, normal);
 
     glm::vec3 r = glm::vec3(-l.x + 2*lDotN*normal.x, -l.y + 2*lDotN*normal.y, -l.z + 2*lDotN*normal.z); // Reflection vector.
@@ -125,17 +126,17 @@ glm::vec3 trace(const glm::vec3 & ray0, const glm::vec3 & rayD, glm::vec3 camera
         upperType = NOTHING;
         lowerType = type_intersect;
     }
-    glm::vec3 t = glm::normalize(transmit(normal, l, upperType, lowerType)); // Get transmitted angle.
+    glm::vec3 t = transmit(normal, l, upperType, lowerType); // Get transmitted angle.
 
     local = localColor(intersection, viewer, type_intersect, index_intersect, lights, numLights, spheres, numSpheres, triangles, numTriangles, barycentricCoord);
     reflected = trace(intersection, r, camera, type_intersect, index_intersect, lights, numLights, spheres, numSpheres, triangles, numTriangles, recurseDepth - 1);
-    //transmitted = trace(intersection, t, camera, type_intersect, index_intersect, lights, numLights, spheres, numSpheres, triangles, numTriangles, recurseDepth - 1);
+    transmitted = trace(intersection, t, camera, type_intersect, index_intersect, lights, numLights, spheres, numSpheres, triangles, numTriangles, recurseDepth - 1);
 
     float discount = .3;
     float t_discount = .3;
     float alpha = 0.5;
-    return glm::vec3(local.x + discount*reflected.x, local.y + discount*reflected.y, local.z + discount*reflected.z);
-    //return glm::vec3(local.x + discount*reflected.x + t_discount*transmitted.x, local.y + discount*reflected.y + t_discount*transmitted.y, local.z + discount*reflected.z + t_discount*transmitted.z);
+    //return glm::vec3(local.x + discount*reflected.x, local.y + discount*reflected.y, local.z + discount*reflected.z);
+    return glm::vec3(local.x + discount*reflected.x + t_discount*transmitted.x, local.y + discount*reflected.y + t_discount*transmitted.y, local.z + discount*reflected.z + t_discount*transmitted.z);
     //return glm::vec3(local.x + t_discount*transmitted.x, local.y + t_discount*transmitted.y, local.z + t_discount*transmitted.z);
 
 
@@ -155,7 +156,7 @@ glm::vec3 transmit(const glm::vec3 & normal, const glm::vec3 & l, int upperType,
     }
     if (lowerType == SPHERE) {
         nt = 1.33; // Water.
-    } else if (upperType == TRIANGLE) {
+    } else if (lowerType == TRIANGLE) {
         nt = 1.49;
     }
     float n = nt/nl;
